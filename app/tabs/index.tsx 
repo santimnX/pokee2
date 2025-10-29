@@ -1,0 +1,139 @@
+import React, { useState, useEffect } from 'react';
+import { View, Text, FlatList, ActivityIndicator, SafeAreaView, StatusBar } from 'react-native';
+import SearchBar from '../../components/SearchBar';
+import TypeFilter from '../../components/TypeFilter';
+import PokemonCard from '../../components/PokemonCard';
+import { Pokemon, PokemonTypeName } from '../../types/pokemon';
+
+export default function HomeScreen() {
+  const [pokemonList, setPokemonList] = useState<Pokemon[]>([]);
+  const [filteredPokemon, setFilteredPokemon] = useState<Pokemon[]>([]);
+  const [loading, setLoading] = useState<boolean>(true);
+  const [searchQuery, setSearchQuery] = useState<string>('');
+  const [selectedType, setSelectedType] = useState<PokemonTypeName | null>(null);
+
+  // Cargar lista de Pokémon al iniciar
+  useEffect(() => {
+    fetchPokemonList();
+  }, []);
+
+  // Filtrar cuando cambie la búsqueda o el tipo
+  useEffect(() => {
+    filterPokemon();
+  }, [searchQuery, selectedType, pokemonList]);
+
+  const fetchPokemonList = async () => {
+    try {
+      setLoading(true);
+      
+      // Obtener lista de los primeros 151 Pokémon
+      const response = await fetch('https://pokeapi.co/api/v2/pokemon?limit=151');
+      const data = await response.json();
+
+      // Obtener detalles de cada Pokémon en paralelo
+      const detailedPokemon = await Promise.all(
+        data.results.map(async (_: any, index: number) => {
+          const detailResponse = await fetch(`https://pokeapi.co/api/v2/pokemon/${index + 1}`);
+          const details = await detailResponse.json();
+          return {
+            id: index + 1,
+            name: details.name,
+            types: details.types,
+            sprites: details.sprites
+          };
+        })
+      );
+
+      setPokemonList(detailedPokemon);
+      setFilteredPokemon(detailedPokemon);
+    } catch (error) {
+      console.error('Error al cargar Pokémon:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const filterPokemon = () => {
+    let filtered = [...pokemonList];
+
+    // Filtrar por búsqueda (nombre o número)
+    if (searchQuery.trim() !== '') {
+      filtered = filtered.filter(pokemon =>
+        pokemon.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        pokemon.id.toString().includes(searchQuery)
+      );
+    }
+
+    // Filtrar por tipo
+    if (selectedType) {
+      filtered = filtered.filter(pokemon =>
+        pokemon.types.some(typeInfo => typeInfo.type.name === selectedType)
+      );
+    }
+
+    setFilteredPokemon(filtered);
+  };
+
+  if (loading) {
+    return (
+      <View className="flex-1 bg-gradient-to-br from-red-500 to-red-600 justify-center items-center">
+        <View className="bg-white rounded-full p-8 shadow-2xl">
+          <ActivityIndicator size="large" color="#EF4444" />
+        </View>
+        <Text className="mt-6 text-white text-xl font-bold">Cargando Pokédex...</Text>
+        <Text className="mt-2 text-white text-sm opacity-80">Capturando Pokémon</Text>
+      </View>
+    );
+  }
+
+  return (
+    <SafeAreaView className="flex-1 bg-gray-50">
+      <StatusBar barStyle="dark-content" />
+      
+      {/* Header mejorado */}
+      <View className="px-6 pt-6 pb-4 bg-white rounded-b-3xl shadow-sm">
+        <View className="flex-row items-center justify-between mb-2">
+          <View>
+            <Text className="text-4xl font-black text-gray-800">Pokédex</Text>
+            <Text className="text-red-500 font-bold text-sm mt-1">
+              Gen I • Kanto Region
+            </Text>
+          </View>
+          <View className="bg-red-500 rounded-full w-16 h-16 items-center justify-center shadow-lg">
+            <Text className="text-white text-2xl font-bold">{filteredPokemon.length}</Text>
+          </View>
+        </View>
+        <Text className="text-gray-500 text-sm">
+          {selectedType 
+            ? `Filtrando por tipo ${selectedType}` 
+            : 'Todos los Pokémon disponibles'}
+        </Text>
+      </View>
+
+      {/* Barra de búsqueda */}
+      <SearchBar value={searchQuery} onChangeText={setSearchQuery} />
+
+      {/* Filtro de tipos */}
+      <TypeFilter selectedType={selectedType} onSelectType={setSelectedType} />
+
+      {/* Lista de Pokémon */}
+      <FlatList
+        data={filteredPokemon}
+        renderItem={({ item }) => <PokemonCard pokemon={item} />}
+        keyExtractor={(item) => item.id.toString()}
+        numColumns={2}
+        contentContainerStyle={{ padding: 8, paddingBottom: 20 }}
+        showsVerticalScrollIndicator={false}
+        ListEmptyComponent={
+          <View className="flex-1 justify-center items-center mt-20">
+            <Text className="text-6xl mb-4">🔍</Text>
+            <Text className="text-gray-400 text-xl font-bold">No hay resultados</Text>
+            <Text className="text-gray-400 text-sm mt-2">
+              Intenta con otro nombre o tipo
+            </Text>
+          </View>
+        }
+      />
+    </SafeAreaView>
+  );
+}
